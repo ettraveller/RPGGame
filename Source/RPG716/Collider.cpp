@@ -23,8 +23,8 @@ ACollider::ACollider()
     //RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootComponent"));
 
 	SphereComponent = CreateDefaultSubobject<USphereComponent>(TEXT("SphereComponent"));
-	SetRootComponent(SphereComponent);
-	SphereComponent->SetupAttachment(GetRootComponent());
+	RootComponent = SphereComponent;
+	//SphereComponent->SetupAttachment(GetRootComponent());
 	SphereComponent->InitSphereRadius(40.0f);
 	SphereComponent->SetCollisionProfileName(TEXT("Pawn"));
 

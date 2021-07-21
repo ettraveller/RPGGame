@@ -8,6 +8,7 @@
 #include "Engine/World.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFrameWork/CharacterMovementComponent.h"
+#include <Kismet/KismetSystemLibrary.h>
 
 // Sets default values
 AMainCharacter::AMainCharacter()
@@ -45,15 +46,68 @@ AMainCharacter::AMainCharacter()
 
 	MaxHealth = 100.f;
 	Health = 65.f;
-	MaxStamina = 350.f;
+	MaxStamina = 150.f;
 	Stamina = 120.f;
 	Coins = 0;
+
+	RunningSpeed = 600.f;
+	SprintSpeed = 1000.f;
+
+	bShiftKeyDown = false;
+
+	// Initialize Enums
+	MovementStatus = EMovementStatus::EMS_Normal;
+	StaminaStatus = EStaminaStatus::ESS_Normal;
+
+	StaminaDrainRate = 25.f;
+	MinSprintStamina = 50.f;
+
+}
+
+void AMainCharacter::ShowPickUpLocation()
+{
+// tarray for문 돌리는거임
+	/*for (int32 i = 0; i < PickUpLocations.Num(); i++)
+	{
+		UKismetSystemLibrary::DrawDebugSphere(this, PickUpLocations[i], 35.f, 12, FLinearColor::Blue, 5.f, 2.f);
+	}*/
+
+	//for문 조건연산방법 (auto 까지 사용)
+	for (FVector Location : PickUpLocations)
+	{
+		UKismetSystemLibrary::DrawDebugSphere(this, Location, 35.f, 12, FLinearColor::Blue, 5.f, 2.f);
+	}
+}
+
+void AMainCharacter::SetMovementStatus(EMovementStatus Status)
+{
+    MovementStatus = Status;
+	if (MovementStatus == EMovementStatus::EMS_Sprinting)
+	{
+		GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
+	}
+	else
+	{
+		GetCharacterMovement()->MaxWalkSpeed = RunningSpeed;
+	}
+}
+
+void AMainCharacter::ShiftKeyDown()
+{
+    bShiftKeyDown = true;
+}
+
+void AMainCharacter::ShiftKeyUp()
+{
+    bShiftKeyDown = false;
 }
 
 // Called when the game starts or when spawned
 void AMainCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	UKismetSystemLibrary::DrawDebugSphere(this, GetActorLocation() + FVector(0.f, 0.f, 75.f), 35.f, 12, FLinearColor::Blue, 5.f, 2.f);
 	
 }
 
@@ -61,7 +115,105 @@ void AMainCharacter::BeginPlay()
 void AMainCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+    
+	float DeltaStamina = StaminaDrainRate * DeltaTime;
 
+	switch (StaminaStatus)
+	{
+	
+	case EStaminaStatus::ESS_Normal:
+		//shiftKey Down
+		if (bShiftKeyDown)
+		{
+			if (Stamina - DeltaStamina <= MinSprintStamina)
+			{
+		        SetStaminaStatus(EStaminaStatus::ESS_BelowMinimum);
+				Stamina -= DeltaStamina;
+			}
+			else
+			{
+			    Stamina -= DeltaStamina;
+				SetMovementStatus(EMovementStatus::EMS_Sprinting);
+			}
+			
+		}
+		//shiftKeyUp
+		else
+		{
+			if (Stamina + DeltaStamina >= MaxStamina)
+			{
+			    Stamina = MaxStamina;
+			}
+			else
+			{
+				Stamina += DeltaStamina;
+			}
+			SetMovementStatus(EMovementStatus::EMS_Normal);
+		}
+		break;
+	case EStaminaStatus::ESS_BelowMinimum:
+		//shiftKey Down
+		if (bShiftKeyDown)
+		{
+			if (Stamina - DeltaStamina <= 0.f)
+			{
+				SetStaminaStatus(EStaminaStatus::ESS_Exhausted);
+				Stamina = 0;
+				SetMovementStatus(EMovementStatus::EMS_Normal);
+			}
+			else
+			{
+				Stamina -= DeltaStamina;
+				SetMovementStatus(EMovementStatus::EMS_Sprinting);
+			}
+			
+		}
+		//shiftKeyUp
+		else
+		{
+			if (Stamina + DeltaStamina >= MinSprintStamina)
+			{
+			    SetMovementStatus(EMovementStatus::EMS_Normal);
+				Stamina += MaxStamina;
+			}
+			else
+			{
+				Stamina += DeltaStamina;
+			}
+			SetMovementStatus(EMovementStatus::EMS_Normal);
+		}
+		break;
+	case EStaminaStatus::ESS_Exhausted:
+		//shiftKey Down
+		if (bShiftKeyDown)
+		{
+			Stamina = 0;
+		}
+		//shiftKeyUp
+		else
+		{
+			SetStaminaStatus(EStaminaStatus::ESS_ExhaustedRecovering);
+			Stamina += DeltaStamina;
+		}
+		SetMovementStatus(EMovementStatus::EMS_Normal);
+		break;
+	case EStaminaStatus::ESS_ExhaustedRecovering:
+		//shiftKey Down
+		if (Stamina + DeltaStamina >= MinSprintStamina)
+		{
+			SetStaminaStatus(EStaminaStatus::ESS_Normal);
+			Stamina += DeltaStamina;
+		}
+		//shiftKeyUp
+		else
+		{
+			Stamina += DeltaStamina;
+		}
+		SetMovementStatus(EMovementStatus::EMS_Normal);
+		break;
+	default:
+		break;
+	}
 }
 
 // Called to bind functionality to input
@@ -72,6 +224,9 @@ void AMainCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 
 	PlayerInputComponent->BindAction(TEXT("Jump"), IE_Pressed, this, &AMainCharacter::Jump);
 	PlayerInputComponent->BindAction(TEXT("Jump"), IE_Released, this, &AMainCharacter::StopJumping);
+
+	PlayerInputComponent->BindAction(TEXT("Sprint"), IE_Pressed, this, &AMainCharacter::ShiftKeyDown);
+	PlayerInputComponent->BindAction(TEXT("Sprint"), IE_Released, this, &AMainCharacter::ShiftKeyUp);
 
 	PlayerInputComponent->BindAxis(TEXT("MoveForward"), this, &AMainCharacter::MoveForward);
 	PlayerInputComponent->BindAxis(TEXT("MoveRight"), this, &AMainCharacter::MoveRight);
@@ -115,5 +270,28 @@ void AMainCharacter::TurnAtRate(float Rate)
 void AMainCharacter::LookUpAtRate(float Rate)
 {
 	AddControllerPitchInput(Rate * BaseLookUpRate * GetWorld()->GetDeltaSeconds());
+}
+
+void AMainCharacter::DecrementHealth(float Amount)
+{
+	if (Health - Amount <= 0.f)
+	{
+	    Health -= Amount;
+	    Die();
+	}
+	else
+	{
+		Health -= Amount;
+	}
+}
+
+void AMainCharacter::IncrementHealth(int32 Amount)
+{
+	Coins += Amount;
+}
+
+void AMainCharacter::Die()
+{
+    
 }
 
