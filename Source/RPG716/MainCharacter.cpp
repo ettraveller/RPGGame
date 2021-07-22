@@ -9,6 +9,10 @@
 #include "Components/CapsuleComponent.h"
 #include "GameFrameWork/CharacterMovementComponent.h"
 #include <Kismet/KismetSystemLibrary.h>
+#include "Weapon.h"
+#include "Animation/AnimInstance.h"
+#include "Components/SkeletalMeshComponent.h"
+#include <Animation/AnimMontage.h>
 
 // Sets default values
 AMainCharacter::AMainCharacter()
@@ -54,6 +58,7 @@ AMainCharacter::AMainCharacter()
 	SprintSpeed = 1000.f;
 
 	bShiftKeyDown = false;
+	bLMBDown = false;
 
 	// Initialize Enums
 	MovementStatus = EMovementStatus::EMS_Normal;
@@ -211,8 +216,6 @@ void AMainCharacter::Tick(float DeltaTime)
 		}
 		SetMovementStatus(EMovementStatus::EMS_Normal);
 		break;
-	default:
-		break;
 	}
 }
 
@@ -228,6 +231,9 @@ void AMainCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 	PlayerInputComponent->BindAction(TEXT("Sprint"), IE_Pressed, this, &AMainCharacter::ShiftKeyDown);
 	PlayerInputComponent->BindAction(TEXT("Sprint"), IE_Released, this, &AMainCharacter::ShiftKeyUp);
 
+	PlayerInputComponent->BindAction(TEXT("LMB"), IE_Pressed, this, &AMainCharacter::LMBDown);
+	PlayerInputComponent->BindAction(TEXT("LMB"), IE_Released, this, &AMainCharacter::LMBUp);
+
 	PlayerInputComponent->BindAxis(TEXT("MoveForward"), this, &AMainCharacter::MoveForward);
 	PlayerInputComponent->BindAxis(TEXT("MoveRight"), this, &AMainCharacter::MoveRight);
 	PlayerInputComponent->BindAxis(TEXT("TurnRate"), this, &AMainCharacter::TurnAtRate);
@@ -240,7 +246,7 @@ void AMainCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 
 void AMainCharacter::MoveForward(float Value)
 {
-	if (Controller != nullptr && Value != 0.0)
+	if (Controller != nullptr && Value != 0.0 && (!bAttacking))
 	{
 	    const FRotator Rotation = Controller->GetControlRotation();
 		const FRotator YawRotation(0.f, Rotation.Yaw, 0.f);
@@ -252,7 +258,7 @@ void AMainCharacter::MoveForward(float Value)
 
 void AMainCharacter::MoveRight(float Value)
 {
-	if (Controller != nullptr && Value != 0.0)
+	if (Controller != nullptr && Value != 0.0 && (!bAttacking))
 	{
 		const FRotator Rotation = Controller->GetControlRotation();
 		const FRotator YawRotation(0.f, Rotation.Yaw, 0.f);
@@ -293,5 +299,81 @@ void AMainCharacter::IncrementHealth(int32 Amount)
 void AMainCharacter::Die()
 {
     
+}
+
+void AMainCharacter::LMBDown()
+{
+    bLMBDown = true;
+
+	if (ActiveOverlappingItem)
+	{
+		AWeapon* Weapon = Cast<AWeapon>(ActiveOverlappingItem);
+		if (Weapon)
+		{
+			Weapon->Equip(this);
+			SetActiveOverlappingItem(nullptr);
+		}
+	}
+	else if(EquipWeapon)
+	{
+	    Attack();
+	}
+}
+
+void AMainCharacter::LMBUp()
+{
+    bLMBDown = false;
+}
+
+void AMainCharacter::SetEquipWeapon(AWeapon* WeaponToSet)
+{
+	if (EquipWeapon)
+	{
+		EquipWeapon->Destroy();
+	}
+    EquipWeapon = WeaponToSet; 
+}
+
+void AMainCharacter::Attack()
+{
+
+	if (!bAttacking)
+	{
+		bAttacking = true;
+
+		UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+		if (AnimInstance && CombatMontage)
+		{
+			 int32 Section = FMath::RandRange(0, 1);
+			 switch (Section)
+			 {
+			 case 0:
+				 AnimInstance->Montage_Play(CombatMontage, 2.2f);
+				 AnimInstance->Montage_JumpToSection(FName("Attack_2"), CombatMontage);
+				 break;
+
+			 case 1:
+				 AnimInstance->Montage_Play(CombatMontage, 1.8f);
+				 AnimInstance->Montage_JumpToSection(FName("Attack_2"), CombatMontage);
+				 break;
+
+			 default:
+				 ;
+			 }
+			AnimInstance->Montage_Play(CombatMontage, 1.35f);
+			AnimInstance->Montage_JumpToSection(FName("Attack_1"), CombatMontage);
+		}
+	}  
+
+}
+
+void AMainCharacter::AttackEnd()
+{
+    bAttacking = false;
+
+	if (bLMBDown)
+	{
+		Attack();
+	}
 }
 

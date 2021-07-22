@@ -47,7 +47,7 @@ public:
 	AMainCharacter();
 
 	TArray<FVector> PickUpLocations;
-	
+
 	UFUNCTION(BlueprintCallable)
 	void ShowPickUpLocation();
 
@@ -116,17 +116,44 @@ public:
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
-
+	//playerinput
 	void MoveForward(float Value);
 	void MoveRight(float Value);
 	void TurnAtRate(float Rate);
 	void LookUpAtRate(float Rate);
+	
+	//HUD
 	void DecrementHealth(float Amount);
 	void IncrementHealth(int32 Amount);
 	void Die();
 
+	//Sound
+	void LMBDown();
+	void LMBUp();
+	bool bLMBDown;
+
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 
+	//SetEquipWeapon
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Items")
+	class AWeapon* EquipWeapon;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Items")
+	class AItem* ActiveOverlappingItem;
+
+	void SetEquipWeapon(AWeapon* WeaponToSet);
+	FORCEINLINE AWeapon* GetEquipWeapon() { return EquipWeapon; }
+	FORCEINLINE void SetActiveOverlappingItem(AItem* Item) { ActiveOverlappingItem = Item; }
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Anims")
+	bool bAttacking;
+
+	void Attack();
+
+	UFUNCTION(BlueprintCallable)
+	void AttackEnd();
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Anims")
+	class UAnimMontage* CombatMontage;
 };
