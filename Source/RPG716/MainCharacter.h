@@ -90,6 +90,12 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
 	float BaseLookUpRate;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat")
+	class UParticleSystem* HitParticle;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat")
+	class USoundCue* HitSound;
+
 	////////
 	// Player Stats
 	////////
@@ -156,4 +162,7 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Anims")
 	class UAnimMontage* CombatMontage;
+
+	UFUNCTION(BlueprintCallable)
+	void PlaySwingSound();
 };

@@ -13,6 +13,8 @@
 #include "Animation/AnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
 #include <Animation/AnimMontage.h>
+#include "Sound/SoundCue.h"
+#include <Kismet/GameplayStatics.h>
 
 // Sets default values
 AMainCharacter::AMainCharacter()
@@ -350,21 +352,26 @@ void AMainCharacter::Attack()
 			 case 0:
 				 AnimInstance->Montage_Play(CombatMontage, 2.2f);
 				 AnimInstance->Montage_JumpToSection(FName("Attack_2"), CombatMontage);
+				 UE_LOG(LogTemp, Warning, TEXT("Case 0"));
 				 break;
 
 			 case 1:
 				 AnimInstance->Montage_Play(CombatMontage, 1.8f);
-				 AnimInstance->Montage_JumpToSection(FName("Attack_2"), CombatMontage);
+				 AnimInstance->Montage_JumpToSection(FName("Attack_1"), CombatMontage);
+				 UE_LOG(LogTemp, Warning, TEXT("Case 1"));
 				 break;
 
 			 default:
-				 ;
+				 break;
 			 }
-			AnimInstance->Montage_Play(CombatMontage, 1.35f);
-			AnimInstance->Montage_JumpToSection(FName("Attack_1"), CombatMontage);
+			 /*AnimInstance->Montage_Play(CombatMontage, 1.35f);
+			 AnimInstance->Montage_JumpToSection(FName("Attack_1"), CombatMontage);*/
 		}
 	}  
-
+	if (EquipWeapon->SwingSound)
+	{
+	    //UGameplayStatics::PlaySound2D(this, EquipWeapon->SwingSound);
+	}
 }
 
 void AMainCharacter::AttackEnd()
@@ -374,6 +381,14 @@ void AMainCharacter::AttackEnd()
 	if (bLMBDown)
 	{
 		Attack();
+	}
+}
+
+void AMainCharacter::PlaySwingSound()
+{
+    if(EquipWeapon->SwingSound)
+	{
+	     UGameplayStatics::PlaySound2D(this,EquipWeapon->SwingSound);
 	}
 }
 
