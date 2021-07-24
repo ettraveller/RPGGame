@@ -12,6 +12,8 @@
 #include "Sound/SoundCue.h"
 #include "Animation/AnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "TimerManager.h"
+#include "Components/CapsuleComponent.h"
 
 
 // Sets default values
@@ -39,6 +41,13 @@ AEnemy::AEnemy()
 	MaxHealth = 100.f;
 	Damage = 10.f;
 
+	AttackMaxTime = 2.0f;
+	AttackMinTime = 0.5f;
+
+	EnemyMovementStatus = EEnemyMovementStatus::EMS_Idle;
+
+	DeathDelay = 3.f;
+
 }
 
 // Called when the game starts or when spawned
@@ -61,6 +70,8 @@ void AEnemy::BeginPlay()
 	CombatCollision->SetCollisionObjectType(ECollisionChannel::ECC_WorldDynamic);
 	CombatCollision->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
 	CombatCollision->SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Overlap);
+
+	bOverlappingCombatSphere = false;
 }
 
 // Called every frame
@@ -79,11 +90,12 @@ void AEnemy::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 
 void AEnemy::AgroSphereOnOverlapBegin(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-    if(OtherActor)
+    if(OtherActor && Alive())
 	{
 	    AMainCharacter* Main = Cast<AMainCharacter>(OtherActor);
 		if (Main)
 		{
+			UE_LOG(LogTemp, Warning, TEXT("AgroMove"));
 			MoveToTarget(Main);
 		}
 	}
@@ -101,6 +113,7 @@ void AEnemy::AgroSphereOnOverlapEnd(UPrimitiveComponent* OverlappedComponent, AA
 			if (AIController)
 			{
 				AIController->StopMovement();
+				//UE_LOG(LogTemp, Warning, TEXT("WTF"));
 			}
 		}
 	}
@@ -108,19 +121,19 @@ void AEnemy::AgroSphereOnOverlapEnd(UPrimitiveComponent* OverlappedComponent, AA
 
 void AEnemy::CombatSphereOnOverlapBegin(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	if (OtherActor)
+	if (OtherActor && Alive())
 	{
 		AMainCharacter* Main = Cast<AMainCharacter>(OtherActor);
 		{
-		if (Main)
-		{
-		    CombatTarget = Main;
-		    bOverlappingCombatSphere = true;
-			Attack();
-		    //SetEnemyMovementStatus(EEnemyMovementStatus::EMS_Attacking);
-			//attacking animation구현은 블루프린트에서
-			
-		}
+		    if (Main)
+		    {
+		        Main->SetCombatTarget(this);
+		        CombatTarget = Main;
+		        bOverlappingCombatSphere = true;
+			    Attack();
+		        //SetEnemyMovementStatus(EEnemyMovementStatus::EMS_Attacking);
+			    //attacking animation구현은 블루프린트에서
+		    }
 		}
 	}
 }
@@ -129,19 +142,27 @@ void AEnemy::CombatSphereOnOverlapEnd(UPrimitiveComponent* OverlappedComponent, 
 {
 	if (OtherActor)
 	{
+	//UE_LOG(LogTemp, Warning, TEXT("WTF"));
 		AMainCharacter* Main = Cast<AMainCharacter>(OtherActor);
-		if (Main)
-		{
-			/*SetEnemyMovementStatus(EEnemyMovementStatus::EMS_MoveToTarget);
-			MoveToTarget(Main);*/
-			bOverlappingCombatSphere = false;
-			if (EnemyMovementStatus != EEnemyMovementStatus::EMS_Attacking)
-			{
-				MoveToTarget(Main);
-				CombatTarget = nullptr;
+		   if (Main)
+		   {
+			    if (Main->CombatToTarget == this)
+			    {
+				    Main->SetCombatTarget(nullptr);
+				}
+				//SetEnemyMovementStatus(EEnemyMovementStatus::EMS_MoveToTarget);
+				//MoveToTarget(Main);
+				bOverlappingCombatSphere = false;
+				UE_LOG(LogTemp, Warning, TEXT("WTF,1"));
+				if (EnemyMovementStatus != EEnemyMovementStatus::EMS_Attacking)
+				{
+					MoveToTarget(Main);
+					CombatTarget = nullptr;
+					UE_LOG(LogTemp, Warning, TEXT("WTF,2"));
+				}
+				GetWorldTimerManager().ClearTimer(AttackTimer);
 			}
-			
-		}
+		  		
 	}
 }
 
@@ -168,12 +189,12 @@ void AEnemy::MoveToTarget(class AMainCharacter* Target)
 		// 
 		//TArray<FNavPathPoint> PathPoint = NavPath->GetPathPoints();
 
-		/*auto PathPoint = NavPath->GetPathPoints();
+		auto PathPoint = NavPath->GetPathPoints();
 		for (auto Point : PathPoint)
 		{
 			FVector Location = Point.Location;
 			UKismetSystemLibrary::DrawDebugSphere(this, Location ,25.f, 8, FLinearColor::Blue, 10.f, 0.5f);
-		}*/
+		}
 
 	}
 }
@@ -197,6 +218,10 @@ void AEnemy::CombatOnOverlapBegin(UPrimitiveComponent* OverlappedComponent, AAct
 			if (Main->HitSound)
 			{
 				UGameplayStatics::PlaySound2D(this, Main->HitSound);
+			}
+			if (DamageTypeClass)
+			{
+				UGameplayStatics::ApplyDamage(Main, Damage, AIController, this, DamageTypeClass);
 			}
 		}
 
@@ -222,34 +247,93 @@ void AEnemy::DeactivateCollision()
 
 void AEnemy::Attack()
 {
-	if (AIController)
+	if (Alive())
 	{
-		AIController->StopMovement();
-		SetEnemyMovementStatus(EEnemyMovementStatus::EMS_Attacking);
-	}
-	if (!bAttacking)
-	{
-		bAttacking = true;
-		UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
-		if (AnimInstance)
+		if (AIController)
 		{
-			AnimInstance->Montage_Play(CombatMontage, 1.2f);
-			AnimInstance->Montage_JumpToSection(FName("Attack_1"), CombatMontage);
+			AIController->StopMovement();
+			//여기서 꼬임씨ㅣㅆㅆㅆㅆㅆㅆㅆㅆㅆㅆㅆㅆ
+			//SetEnemyMovementStatus(EEnemyMovementStatus::EMS_Attacking);
+		}
+		if (!bAttacking)
+		{
+			bAttacking = true;
+			UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+			if (AnimInstance)
+			{
+				AnimInstance->Montage_Play(CombatMontage, 1.2f);
+				AnimInstance->Montage_JumpToSection(FName("Attack_1"), CombatMontage);
+			}
 
 		}
-		if (SwingSound)
-		{
-			
-		}
-	} 
-    
+	}
+	
+
 }
 
-void AEnemy::AttackEnd()
+void AEnemy::AttackEnd(AActor* OtherActor)
 {
-    bAttacking = false;
+    if(bAttacking)
+	{   
+	     UE_LOG(LogTemp, Warning, TEXT("Attack_end"));
+         bAttacking = false;
+	}
+
 	if (bOverlappingCombatSphere)
 	{
-		Attack();
+	    float AttackTime = FMath::FRandRange(AttackMinTime, AttackMaxTime);
+		GetWorldTimerManager().SetTimer(AttackTimer, this, &AEnemy::Attack, AttackTime);
+		//Attack();
+		
 	}
+	
+}
+
+float AEnemy::TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser)
+{
+	if (Health - DamageAmount <= 0.f)
+	{
+	    Health -= DamageAmount;
+		Die();
+	}
+	else
+	{
+		Health -= DamageAmount;
+	}
+
+	return DamageAmount;
+}
+
+void AEnemy::Die()
+{
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	if (AnimInstance)
+	{
+		AnimInstance->Montage_Play(CombatMontage, 1.2f);
+		AnimInstance->Montage_JumpToSection(FName("Death"));
+	}
+	SetEnemyMovementStatus(EEnemyMovementStatus::EMS_Death);
+
+	CombatCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	AgroSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	CombatSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+}
+
+void AEnemy::DeathEnd()
+{
+    GetMesh()->bPauseAnims = true;
+	GetMesh()->bNoSkeletonUpdate = true;
+
+	GetWorldTimerManager().SetTimer(DeathTimer, this, &AEnemy::Disappear, DeathDelay);
+}
+
+bool AEnemy::Alive()
+{
+    return GetEnemyMoveMentStatus() != EEnemyMovementStatus::EMS_Death;
+}
+
+void AEnemy::Disappear()
+{
+    Destroy();
 }

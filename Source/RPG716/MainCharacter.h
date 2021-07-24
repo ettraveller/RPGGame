@@ -64,6 +64,23 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
 	float MinSprintStamina;
 
+
+	//Interpolation
+
+	float InterpSpeed;
+
+	bool bInterpToEnemy;
+
+	void SetIntepToEnemy(bool Interp);
+
+	FRotator GetLookAtRotationYaw(FVector Target);
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	class AEnemy* CombatToTarget;
+
+	FORCEINLINE void SetCombatTarget(AEnemy* Target) { CombatToTarget = Target;}
+	
+	
 	//set SetMovementStatus and runnigspeed
 	void SetMovementStatus(EMovementStatus Status);
 
@@ -110,6 +127,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Stats")
 	int32 Coins;
 
+	
+
 
 protected:
 	// Called when the game starts or when spawned
@@ -132,6 +151,7 @@ public:
 	void DecrementHealth(float Amount);
 	void IncrementHealth(int32 Amount);
 	void Die();
+	virtual float TakeDamage(float DamageAmount,struct FDamageEvent const& DamageEvent,	class AController* EventInstigator,	AActor* DamageCauser) override;
 
 	//Sound
 	void LMBDown();

@@ -15,6 +15,9 @@
 #include <Animation/AnimMontage.h>
 #include "Sound/SoundCue.h"
 #include <Kismet/GameplayStatics.h>
+#include <Kismet/KismetMathLibrary.h>
+#include "Enemy.h"
+#include <Math/UnrealMathUtility.h>
 
 // Sets default values
 AMainCharacter::AMainCharacter()
@@ -69,6 +72,9 @@ AMainCharacter::AMainCharacter()
 	StaminaDrainRate = 25.f;
 	MinSprintStamina = 50.f;
 
+	InterpSpeed = 15.f;
+	bInterpToEnemy = false;
+
 }
 
 void AMainCharacter::ShowPickUpLocation()
@@ -84,6 +90,19 @@ void AMainCharacter::ShowPickUpLocation()
 	{
 		UKismetSystemLibrary::DrawDebugSphere(this, Location, 35.f, 12, FLinearColor::Blue, 5.f, 2.f);
 	}
+}
+
+void AMainCharacter::SetIntepToEnemy(bool Interp)
+{
+    bInterpToEnemy = Interp;
+}
+
+FRotator AMainCharacter::GetLookAtRotationYaw(FVector Target)
+{
+    FRotator LookAtRotation = UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), Target);
+	FRotator LookAtRotationYaw(0.f, LookAtRotation.Yaw, 0.f);
+
+	return LookAtRotationYaw;
 }
 
 void AMainCharacter::SetMovementStatus(EMovementStatus Status)
@@ -219,6 +238,15 @@ void AMainCharacter::Tick(float DeltaTime)
 		SetMovementStatus(EMovementStatus::EMS_Normal);
 		break;
 	}
+
+	//보간(에너미가 타겟으로 스무스하게 로테이팅 되게하는거)
+	if (bInterpToEnemy && CombatToTarget)
+	{
+	    FRotator LookAtYaw = GetLookAtRotationYaw(CombatToTarget->GetActorLocation());
+	    FRotator InterpRotation = FMath::RInterpTo(GetActorRotation(), LookAtYaw, DeltaTime, InterpSpeed);
+
+		SetActorRotation(InterpRotation);
+	}
 }
 
 // Called to bind functionality to input
@@ -300,7 +328,19 @@ void AMainCharacter::IncrementHealth(int32 Amount)
 
 void AMainCharacter::Die()
 {
-    
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	if (AnimInstance && CombatMontage)
+	{
+		AnimInstance->Montage_Play(CombatMontage, 1.0f);
+		AnimInstance->Montage_JumpToSection(FName("Death"));
+	}
+}
+
+float AMainCharacter::TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser)
+{
+    DecrementHealth(DamageAmount);
+
+	return DamageAmount;
 }
 
 void AMainCharacter::LMBDown()
@@ -342,6 +382,7 @@ void AMainCharacter::Attack()
 	if (!bAttacking)
 	{
 		bAttacking = true;
+		SetIntepToEnemy(true);
 
 		UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
 		if (AnimInstance && CombatMontage)
@@ -377,6 +418,7 @@ void AMainCharacter::Attack()
 void AMainCharacter::AttackEnd()
 {
     bAttacking = false;
+	SetIntepToEnemy(false);
 
 	if (bLMBDown)
 	{
